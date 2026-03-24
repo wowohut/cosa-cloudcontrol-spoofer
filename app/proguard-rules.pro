@@ -25,9 +25,8 @@
 
 -dontwarn java.lang.reflect.AnnotatedType
 
-# Xposed/YukiHookAPI 入口类必须保持类名不被混淆（对应 assets/xposed_init 与 META-INF/yukihookapi_init）
--keep class com.spoof.cosa.hook.HookEntry { *; }
--keep class com.spoof.cosa.hook.HookEntry_YukiHookXposedInit { *; }
+# Modern Xposed 入口类名需与 META-INF/xposed/java_init.list 一致
+-keep class com.spoof.cosa.hook.CosaModule { *; }
 
 -assumenosideeffects class kotlin.jvm.internal.Intrinsics {
     public static *** throwUninitializedProperty(...);

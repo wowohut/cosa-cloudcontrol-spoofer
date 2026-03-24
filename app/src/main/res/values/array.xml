@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string-array name="module_scope">
-        <item>com.oplus.cosa</item>
-    </string-array>
-</resources>

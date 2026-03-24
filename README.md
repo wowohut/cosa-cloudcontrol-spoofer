@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-一个基于 YukiHookAPI 的 LSPosed 模块，用于 Hook ColorOS 的 `com.oplus.cosa`（应用增强服务），伪装 `ro.boot.prjname`，从而让应用增强服务按“目标机型”拉取对应的云控配置。
+一个基于 `libxposed API 101` 的现代 Xposed 模块，用于 Hook ColorOS 的 `com.oplus.cosa`（应用增强服务），伪装 `ro.boot.prjname`，让应用增强服务按“目标机型”拉取对应的云控配置。
 
 > 这里的“云控”可理解为游戏调度/策略配置（如性能策略、帧率策略等）。通常在同一 SoC 平台内，选择更合适的云控配置能让游戏体验更接近该平台的最佳状态。
 
@@ -16,16 +16,14 @@
 
 ### 核心功能
 
-| 功能 | 描述 |
-|------|------|
-| 属性伪装 | Hook `SystemProperties.get()` 方法，当获取 `ro.boot.prjname` 时返回伪装值 |
-| 作用域限制 | 仅对 `com.oplus.cosa`（应用增强服务）生效，不影响系统其他部分 |
-| 可配置伪装值 | 模块设置页提供输入框，可自定义 `ro.boot.prjname` 伪装值（留空使用默认值） |
+- Hook `SystemProperties.get(String)` 与 `get(String, String)`，当读取 `ro.boot.prjname` 时返回伪装值
+- 仅对 `com.oplus.cosa` 生效，不影响系统其他进程
+- 设置页通过 `RemotePreferences` 读写伪装值
 
 ### 技术实现
 
-- **框架**: YukiHookAPI 1.3.1+
-- **平台**: LSPosed
+- **框架**: libxposed API 101
+- **平台**: 支持 modern Xposed API 的 LSPosed / libxposed 实现
 - **语言**: Kotlin
 - **最低 API**: 27 (Android 8.1)
 - **目标 API**: 36
@@ -33,60 +31,45 @@
 ## Hook 点
 
 ```kotlin
-// 目标类
-android.os.SystemProperties
-
-// 目标方法
-get(String key) -> String
-get(String key, String def) -> String
-
-// 伪装逻辑
 if (key == "ro.boot.prjname") {
-    return FAKE_PRJNAME  // 返回伪装值
+    return spoofValue
 }
+return originalValue
 ```
-
-> 补充：部分版本的应用增强服务会把系统属性缓存到自身 `SharedPreferences`（例如 `prop_and_oplus_feature_sp.xml`），本模块同时会拦截 `SharedPreferences.getString/getAll` 对 `ro.boot.prjname` 的读取，确保缓存存在时也能生效。
 
 ## 配置项
 
-| 配置 | 值 | 说明 |
-|------|-----|------|
-| `FAKE_PRJNAME` | `24831` | 目标机型的项目号 |
+| 配置                | 值        | 说明                           |
+| ------------------- | --------- | ------------------------------ |
+| `ro.boot.prjname` | `24831` | 默认伪装值，可在模块设置页修改 |
 
-> 说明：默认伪装值为 `24831`，可在模块设置页输入框中修改并保存；修改后需重启应用增强服务生效。
+说明：修改后需清除 `com.oplus.cosa` 数据重启生效。
 
 ## 使用方法
 
 1. 编译安装 APK
-2. 在 LSPosed 中激活模块
-3. 勾选作用域：`com.oplus.cosa`
-4. 重启应用增强服务或重启手机
+2. 在框架中激活模块
+3. 确认作用域仅为 `com.oplus.cosa`
+4. 打开模块设置页，写入需要的 `ro.boot.prjname`，然后自动清除数据重启手机
 
 ## 开发构建说明
 
-- 本项目已内置 Xposed API 编译桩：`app/libs/xposed-api-82.jar`，用于避免部分环境无法访问 Xposed Maven 源导致的构建失败
-- 依赖 `drawabletoolbox` 来自 JitPack，`settings.gradle.kts` 已加入 `https://jitpack.io`
+- 模块入口走 `META-INF/xposed/java_init.list`
+- 模块元数据走 `META-INF/xposed/module.prop`
+- 作用域走 `META-INF/xposed/scope.list`
 
 ## 项目结构
 
-```
-CosaSpoof/
-├── app/
-│   └── src/main/java/com/spoof/cosa/
-│       ├── hook/
-│       │   └── HookEntry.kt    # Hook 入口
-│       └── ui/
-│           └── MainActivity.kt  # 模块激活状态界面
-├── settings.gradle.kts
-└── README.md
-```
+- `hook/CosaModule.kt`: modern Xposed 入口
+- `data/SpoofSettings.kt`: 远程配置读写封装
+- `data/XposedServiceBridge.kt`: 模块 App 与 Xposed Service 的连接桥
+- `ui/activity/MainActivity.kt`: 极简设置页
 
 ## 注意事项
 
-- 仅影响应用增强服务，不影响系统 OTA 更新
-- 修改 `FAKE_PRJNAME` 可切换不同机型的云控
-- 调试时 `isDebug = true`，发布时改为 `false`
+- 仅影响应用增强服务，不影响 OTA 更新
+- 不再兼容旧版共享偏好配置；升级后如有自定义值，需要在设置页重新保存一次
+- 需要框架支持 `libxposed API 101` 和 remote capabilities
 
 ## 许可证
 

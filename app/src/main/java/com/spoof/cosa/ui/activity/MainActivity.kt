@@ -1,430 +1,184 @@
-@file:Suppress("SetTextI18n")
-
 package com.spoof.cosa.ui.activity
 
-import android.content.ComponentName
-import android.content.pm.PackageManager
-import android.graphics.Typeface
 import android.os.Bundle
-import android.text.InputType
-import android.text.TextUtils
-import android.text.util.Linkify
-import android.view.Gravity
-import android.view.View
-import android.view.ViewGroup.MarginLayoutParams
-import android.widget.LinearLayout
 import android.widget.Toast
-import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
-import androidx.core.view.setPadding
-import androidx.core.view.updateMargins
-import androidx.core.view.updatePadding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.spoof.cosa.BuildConfig
 import com.spoof.cosa.R
-import com.highcapable.betterandroid.system.extension.component.disableComponent
-import com.highcapable.betterandroid.system.extension.component.enableComponent
-import com.highcapable.betterandroid.system.extension.component.isComponentEnabled
-import com.highcapable.betterandroid.ui.component.activity.AppViewsActivity
-import com.highcapable.betterandroid.ui.extension.component.base.getThemeAttrsDrawable
-import com.highcapable.betterandroid.ui.extension.view.textColor
-import com.highcapable.betterandroid.ui.extension.view.updateMargins
-import com.highcapable.betterandroid.ui.extension.view.updatePadding
-import com.highcapable.betterandroid.ui.extension.view.updateTypeface
-import com.highcapable.hikage.core.base.Hikageable
-import com.highcapable.hikage.extension.setContentView
-import com.highcapable.hikage.widget.android.widget.ImageView
-import com.highcapable.hikage.widget.android.widget.LinearLayout
-import com.highcapable.hikage.widget.android.widget.EditText
-import com.highcapable.hikage.widget.android.widget.Space
-import com.highcapable.hikage.widget.android.widget.TextView
-import com.highcapable.hikage.widget.androidx.core.widget.NestedScrollView
-import com.highcapable.hikage.widget.com.spoof.cosa.ui.view.MaterialSwitch
-import com.highcapable.yukihookapi.YukiHookAPI
 import com.spoof.cosa.common.SpoofConfig
-import com.spoof.cosa.data.SpoofPreferences
-import android.R as Android_R
+import com.spoof.cosa.data.CosaMaintenanceActions
+import com.spoof.cosa.data.SpoofSettings
+import com.spoof.cosa.data.XposedServiceBridge
+import com.spoof.cosa.databinding.ActivityMainBinding
+import io.github.libxposed.service.XposedService
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
-class MainActivity : AppViewsActivity() {
+class MainActivity : AppCompatActivity() {
 
-    private val homeComponent by lazy { ComponentName(packageName, "${BuildConfig.APPLICATION_ID}.Home") } 
-    private val spoofPreferences by lazy(LazyThreadSafetyMode.NONE) { SpoofPreferences(this) }
-    private lateinit var fakePrjnameEditText: android.widget.EditText
-    private lateinit var currentFakePrjnameTextView: android.widget.TextView
+    private lateinit var binding: ActivityMainBinding
+    private var spoofSettings: SpoofSettings? = null
+    private val maintenanceActions = CosaMaintenanceActions()
+    private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    @Volatile
+    private var isApplying = false
+
+    private val serviceListener = object : XposedServiceBridge.Listener {
+        override fun onServiceChanged(service: XposedService?) {
+            runOnUiThread { bindServiceState(service) }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-        // Base activity background
-        findViewById<View>(Android_R.id.content).setBackgroundResource(R.color.colorThemeBackground)
+        binding.versionValue.text = getString(R.string.module_version, BuildConfig.VERSION_NAME)
+        binding.defaultValueText.text = getString(R.string.spoof_prjname_default, SpoofConfig.defaultFakePrjname)
+        binding.fakePrjnameInput.setText(SpoofConfig.defaultFakePrjname)
+        binding.saveButton.setOnClickListener { saveFakePrjname() }
 
-        // UI view based on Hikage DSL
-        // See: https://github.com/BetterAndroid/Hikage
-        // Don't like it or want to switch back to XML writing? Can refer to res/layout/activity_main.xml
-        // 不喜欢或者想切换回 XML 写法？可以参考 res/layout/activity_main.xml
-        setContentView {
-            LinearLayout(
-                lparams = LayoutParams(matchParent = true),
-                init = {
-                    orientation = LinearLayout.VERTICAL
-                }
-            ) {
-                LinearLayout(
-                    lparams = LayoutParams(widthMatchParent = true),
-                    init = {
-                        gravity = Gravity.CENTER or Gravity.START
-                        updatePadding(horizontal = 15.dp)
-                        updatePadding(top = 13.dp, bottom = 5.dp)
-                    }
-                ) {
-                    TextView(
-                        lparams = LayoutParams {
-                            weight = 1f
-                        }
-                    ) {
-                        isSingleLine = true
-                        text = getString(R.string.app_name)
-                        textColor = colorResource(R.color.colorTextGray)
-                        textSize = 25f
-                        updateTypeface(Typeface.BOLD)
-                    }
-                    ImageView(
-                        lparams = LayoutParams(27.dp, 27.dp) {
-                            marginEnd = 5.dp
-                        }
-                    ) {
-                        background = getThemeAttrsDrawable(Android_R.attr.selectableItemBackgroundBorderless)
-                        alpha = 0.85f
-                        setImageResource(R.mipmap.ic_github)
-                        imageTintList = stateColorResource(R.color.colorTextGray)
-                        setOnClickListener {
-                            // Do something, e.g., open GitHub page
-                            // 做点什么，比如打开 GitHub 页面
-                        }
-                    }
-                }
-                LinearLayout(
-                    lparams = LayoutParams(widthMatchParent = true) {
-                        updateMargins(horizontal = 15.dp)
-                        updateMargins(top = 10.dp, bottom = 5.dp)
-                    },
-                    init = {
-                        gravity = Gravity.CENTER or Gravity.START
-                        setBackgroundResource(when {
-                            YukiHookAPI.Status.isXposedModuleActive -> R.drawable.bg_green_round
-                            else -> R.drawable.bg_dark_round
-                        })
-                    }
-                ) {
-                    ImageView(
-                        lparams = LayoutParams(25.dp, 25.dp) {
-                            marginStart = 25.dp
-                            marginEnd = 5.dp
-                        }
-                    ) {
-                        setImageResource(when {
-                            YukiHookAPI.Status.isXposedModuleActive -> R.mipmap.ic_success
-                            else -> R.mipmap.ic_warn
-                        })
-                        imageTintList = stateColorResource(R.color.white)
-                    }
-                    LinearLayout(
-                        lparams = LayoutParams(widthMatchParent = true),
-                        init = {
-                            orientation = LinearLayout.VERTICAL
-                            updatePadding(horizontal = 20.dp, vertical = 10.dp)
-                        }
-                    ) {
-                        TextView(
-                            lparams = LayoutParams { 
-                                bottomMargin = 5.dp
-                            }
-                        ) { 
-                            isSingleLine = true
-                            ellipsize = TextUtils.TruncateAt.END
-                            textColor = colorResource(R.color.white)
-                            textSize = 18f
-                            text = stringResource(when {
-                                YukiHookAPI.Status.isXposedModuleActive -> R.string.module_is_activated
-                                else -> R.string.module_not_activated
-                            })
-                        }
-                        LinearLayout(
-                            lparams = LayoutParams {
-                                bottomMargin = 5.dp
-                            },
-                            init = {
-                                gravity = Gravity.CENTER or Gravity.START
-                            }
-                        ) { 
-                            TextView {
-                                alpha = 0.8f
-                                isSingleLine = true
-                                ellipsize = TextUtils.TruncateAt.END
-                                textColor = colorResource(R.color.white)
-                                textSize = 13f
-                                text = stringResource(R.string.module_version, BuildConfig.VERSION_NAME)
-                            }
-                            TextView(
-                                lparams = LayoutParams { 
-                                    leftMargin = 5.dp
-                                }
-                            ) {
-                                setBackgroundResource(R.drawable.bg_orange_round)
-                                updatePadding(horizontal = 5.dp, vertical = 2.dp)
-                                isSingleLine = true
-                                ellipsize = TextUtils.TruncateAt.END
-                                textColor = colorResource(R.color.white)
-                                textSize = 11f
-                                isVisible = false
-                            }
-                        }
-                        TextView {
-                            alpha = 0.8f
-                            isSingleLine = true
-                            ellipsize = TextUtils.TruncateAt.END
-                            textColor = colorResource(R.color.white)
-                            textSize = 13f
-                            text = stringResource(R.string.status_tip)
-                        }
-                        TextView(
-                            lparams = LayoutParams {
-                                topMargin = 2.dp
-                            }
-                        ) {
-                            currentFakePrjnameTextView = this
-                            alpha = 0.8f
-                            isSingleLine = true
-                            ellipsize = TextUtils.TruncateAt.END
-                            textColor = colorResource(R.color.white)
-                            textSize = 13f
-                            text = stringResource(R.string.status_current_fake_prjname, spoofPreferences.getFakePrjname())
-                        }
-                        TextView(
-                            lparams = LayoutParams { 
-                                topMargin = 5.dp
-                            }
-                        ) {
-                            alpha = 0.6f
-                            isSingleLine = true
-                            ellipsize = TextUtils.TruncateAt.END
-                            textColor = colorResource(R.color.white)
-                            textSize = 11f
-                            text = if (YukiHookAPI.Status.Executor.apiLevel > 0)
-                                "Activated by ${YukiHookAPI.Status.Executor.name} API ${YukiHookAPI.Status.Executor.apiLevel}"
-                            else "Activated by ${YukiHookAPI.Status.Executor.name}"
-                            isVisible = YukiHookAPI.Status.isXposedModuleActive
-                        }
+        renderDisconnectedState()
+        XposedServiceBridge.addListener(serviceListener)
+    }
+
+    override fun onDestroy() {
+        XposedServiceBridge.removeListener(serviceListener)
+        backgroundExecutor.shutdownNow()
+        super.onDestroy()
+    }
+
+    private fun bindServiceState(service: XposedService?) {
+        if (service == null) {
+            spoofSettings = null
+            renderDisconnectedState()
+            return
+        }
+
+        runCatching {
+            val settings = SpoofSettings(service.getRemotePreferences(SpoofConfig.remotePrefsGroup))
+            spoofSettings = settings
+            renderConnectedState(service, settings)
+        }.onFailure {
+            spoofSettings = null
+            renderServiceError(it)
+        }
+    }
+
+    private fun renderDisconnectedState() {
+        binding.serviceStatusValue.text = getString(R.string.service_status_waiting)
+        binding.frameworkInfoValue.text = getString(R.string.service_status_waiting_desc)
+        binding.currentValueValue.text = getString(
+            R.string.status_current_fake_prjname,
+            SpoofConfig.defaultFakePrjname
+        )
+        binding.saveButton.text = getString(R.string.spoof_prjname_save_and_apply)
+        binding.saveButton.isEnabled = false
+        binding.fakePrjnameInput.isEnabled = false
+        binding.serviceHintText.isVisible = true
+    }
+
+    private fun renderConnectedState(service: XposedService, settings: SpoofSettings) {
+        val currentValue = settings.getFakePrjname()
+        binding.serviceStatusValue.text = getString(R.string.service_status_connected)
+        binding.frameworkInfoValue.text = getString(
+            R.string.framework_info,
+            service.frameworkName,
+            service.frameworkVersion,
+            service.apiVersion
+        )
+        binding.currentValueValue.text = getString(R.string.status_current_fake_prjname, currentValue)
+        binding.fakePrjnameInput.setText(currentValue)
+        binding.fakePrjnameInput.isEnabled = !isApplying
+        binding.saveButton.text = getString(
+            if (isApplying) R.string.spoof_prjname_applying else R.string.spoof_prjname_save_and_apply
+        )
+        binding.saveButton.isEnabled = !isApplying
+        binding.serviceHintText.isVisible = false
+    }
+
+    private fun renderServiceError(error: Throwable) {
+        binding.serviceStatusValue.text = getString(R.string.service_status_error)
+        binding.frameworkInfoValue.text = error.message ?: error.javaClass.simpleName
+        binding.currentValueValue.text = getString(
+            R.string.status_current_fake_prjname,
+            SpoofConfig.defaultFakePrjname
+        )
+        binding.saveButton.text = getString(R.string.spoof_prjname_save_and_apply)
+        binding.saveButton.isEnabled = false
+        binding.fakePrjnameInput.isEnabled = false
+        binding.serviceHintText.isVisible = true
+    }
+
+    private fun saveFakePrjname() {
+        if (isApplying) return
+
+        val settings = spoofSettings
+        if (settings == null) {
+            Toast.makeText(this, R.string.service_unavailable_tip, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val success = settings.setFakePrjname(binding.fakePrjnameInput.text?.toString())
+        if (!success) {
+            Toast.makeText(this, R.string.spoof_prjname_save_failed_tip, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val currentValue = settings.getFakePrjname()
+        binding.fakePrjnameInput.setText(currentValue)
+        binding.currentValueValue.text = getString(R.string.status_current_fake_prjname, currentValue)
+        showApplyConfirmationDialog()
+    }
+
+    private fun showApplyConfirmationDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.apply_confirm_title)
+            .setMessage(R.string.apply_confirm_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.apply_confirm_positive) { _, _ ->
+                applySavedValueAndReboot()
+            }
+            .show()
+    }
+
+    private fun applySavedValueAndReboot() {
+        isApplying = true
+        setApplyingUiState(true)
+        Toast.makeText(this, R.string.spoof_prjname_saved_tip, Toast.LENGTH_SHORT).show()
+
+        backgroundExecutor.execute {
+            when (val result = maintenanceActions.applySavedValueAndReboot()) {
+                CosaMaintenanceActions.ApplyResult.Success -> {
+                    runOnUiThread {
+                        Toast.makeText(this, R.string.apply_rebooting_tip, Toast.LENGTH_LONG).show()
                     }
                 }
-                NestedScrollView(
-                    lparams = LayoutParams(matchParent = true) {
-                        updateMargins(vertical = 10.dp)
-                    },
-                    init = {
-                        isFillViewport = true
-                        isVerticalFadingEdgeEnabled = true
-                    }
-                ) {
-                    LinearLayout(
-                        lparams = LayoutParams(widthMatchParent = true),
-                        init = {
-                            orientation = LinearLayout.VERTICAL
-                        }
-                    ) {
-                        LinearLayout(
-                            lparams = LayoutParams(widthMatchParent = true) {
-                                updateMargins(horizontal = 15.dp)
-                            },
-                            init = {
-                                orientation = LinearLayout.VERTICAL
-                                gravity = Gravity.CENTER or Gravity.START
-                                setBackgroundResource(R.drawable.bg_permotion_round)
-                                updatePadding(left = 15.dp, top = 15.dp, right = 15.dp)
-                            }
-                        ) {
-                            LinearLayout(
-                                lparams = LayoutParams(widthMatchParent = true),
-                                init = {
-                                    gravity = Gravity.CENTER or Gravity.START
-                                }
-                            ) {
-                                ImageView(
-                                    lparams = LayoutParams(15.dp, 15.dp) {
-                                        marginEnd = 10.dp
-                                    }
-                                ) {
-                                    setImageResource(R.mipmap.ic_home)
-                                }
-                                TextView(
-                                    lparams = LayoutParams(widthMatchParent = true)
-                                ) {
-                                    alpha = 0.85f
-                                    isSingleLine = true
-                                    text = stringResource(R.string.display_settings)
-                                    textColor = colorResource(R.color.colorTextGray)
-                                    textSize = 12f
-                                }
-                            }
-                            MaterialSwitch(
-                                lparams = LayoutParams(widthMatchParent = true)
-                            ) {
-                                text = stringResource(R.string.hide_app_icon_on_launcher)
-                                isAllCaps = false
-                                textColor = colorResource(R.color.colorTextGray)
-                                textSize = 15f
-                                isChecked = !isLauncherIconShowing
-                                setOnCheckedChangeListener { button, isChecked ->
-                                    if (button.isPressed) hideOrShowLauncherIcon(!isChecked)
-                                }
-                            }
-                            TextView(
-                                lparams = LayoutParams(widthMatchParent = true) {
-                                    bottomMargin = 10.dp
-                                }
-                            ) {
-                                alpha = 0.6f
-                                setLineSpacing(6f, 1f)
-                                text = stringResource(R.string.hide_app_icon_on_launcher_tip)
-                                textColor = colorResource(R.color.colorTextDark)
-                                textSize = 12f
-                            }
-                            TextView(
-                                lparams = LayoutParams(widthMatchParent = true) {
-                                    bottomMargin = 10.dp
-                                }
-                            ) {
-                                alpha = 0.6f
-                                setLineSpacing(6f, 1f)
-                                text = stringResource(R.string.hide_app_icon_on_launcher_notice)
-                                textColor = 0xFFFF5722.toInt()
-                                textSize = 12f
-                            }
-                            TextView(
-                                lparams = LayoutParams(widthMatchParent = true) {
-                                    topMargin = 5.dp
-                                }
-                            ) {
-                                alpha = 0.85f
-                                isSingleLine = true
-                                text = stringResource(R.string.spoof_prjname_title)
-                                textColor = colorResource(R.color.colorTextGray)
-                                textSize = 12f
-                            }
-                            EditText(
-                                lparams = LayoutParams(widthMatchParent = true) {
-                                    topMargin = 8.dp
-                                }
-                            ) {
-                                fakePrjnameEditText = this
-                                setBackgroundResource(R.drawable.bg_input_field)
-                                setPadding(12.dp)
-                                inputType = InputType.TYPE_CLASS_NUMBER
-                                setText(spoofPreferences.getFakePrjname())
-                                hint = getString(R.string.spoof_prjname_hint, SpoofConfig.defaultFakePrjname)
-                                setHintTextColor(colorResource(R.color.colorTextDark))
-                                setTextColor(colorResource(R.color.colorTextGray))
-                                textSize = 14f
-                            }
-                            LinearLayout(
-                                lparams = LayoutParams(widthMatchParent = true) {
-                                    topMargin = 10.dp
-                                    bottomMargin = 10.dp
-                                },
-                                init = {
-                                    gravity = Gravity.END
-                                }
-                            ) {
-                                TextView(
-                                    lparams = LayoutParams { }
-                                ) {
-                                    text = stringResource(R.string.spoof_prjname_save)
-                                    textColor = colorResource(R.color.white)
-                                    textSize = 12f
-                                    updatePadding(horizontal = 12.dp, vertical = 6.dp)
-                                    setBackgroundResource(R.drawable.bg_green_round)
-                                    setOnClickListener {
-                                        spoofPreferences.setFakePrjname(fakePrjnameEditText.text?.toString().orEmpty())
-                                        val prjname = spoofPreferences.getFakePrjname()
-                                        fakePrjnameEditText.setText(prjname)
-                                        currentFakePrjnameTextView.text = getString(R.string.status_current_fake_prjname, prjname)
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            getString(R.string.spoof_prjname_saved_tip),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            }
-                        }
-                        Space(lparams = LayoutParams(height = 10.dp))
-                        Layout(createPromotionItem(R.string.about_module, R.mipmap.ic_yukihookapi))
-                        Space(lparams = LayoutParams(height = 10.dp))
-                        Layout(createPromotionItem(R.string.about_module_extension, R.mipmap.ic_kavaref))
+
+                is CosaMaintenanceActions.ApplyResult.Failure -> {
+                    runOnUiThread {
+                        isApplying = false
+                        setApplyingUiState(false)
+                        Toast.makeText(
+                            this,
+                            getString(R.string.apply_failed_tip, result.message),
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
             }
         }
     }
 
-    private fun createPromotionItem(
-        @StringRes stringResource: Int,
-        @DrawableRes imageResource: Int
-    ) = Hikageable<MarginLayoutParams> {
-        LinearLayout(
-            lparams = LayoutParams(widthMatchParent = true) {
-                updateMargins(left = 15.dp, right = 15.dp)
-            },
-            init = {
-                gravity = Gravity.CENTER or Gravity.START
-                setBackgroundResource(R.drawable.bg_permotion_round)
-                setPadding(10.dp)
-            }
-        ) {
-            ImageView(
-                lparams = LayoutParams(35.dp, 35.dp) {
-                    marginEnd = 10.dp
-                }
-            ) {
-                setImageResource(imageResource)
-            }
-            TextView(
-                lparams = LayoutParams(widthMatchParent = true)
-            ) {
-                autoLinkMask = Linkify.WEB_URLS
-                ellipsize = TextUtils.TruncateAt.END
-                maxLines = 2
-                setLineSpacing(6f, 1f)
-                text = stringResource(stringResource)
-                textColor = colorResource(R.color.colorTextGray)
-                textSize = 11f
-            }
-        }
+    private fun setApplyingUiState(applying: Boolean) {
+        binding.fakePrjnameInput.isEnabled = !applying
+        binding.saveButton.isEnabled = !applying && spoofSettings != null
+        binding.saveButton.text = getString(
+            if (applying) R.string.spoof_prjname_applying else R.string.spoof_prjname_save_and_apply
+        )
     }
-
-    /**
-     * Hide or show launcher icons
-     *
-     * - You may need the latest version of LSPosed to enable the function of hiding launcher
-     *   icons in higher version systems
-     *
-     * 隐藏或显示启动器图标
-     *
-     * - 你可能需要 LSPosed 的最新版本以开启高版本系统中隐藏 APP 桌面图标功能
-     * @param isShow whether to display / 是否显示
-     */
-    private fun hideOrShowLauncherIcon(isShow: Boolean) {
-        if (isShow)
-            packageManager?.enableComponent(homeComponent, PackageManager.DONT_KILL_APP)
-        else packageManager?.disableComponent(homeComponent, PackageManager.DONT_KILL_APP)
-    }
-
-    /**
-     * Get launcher icon state
-     *
-     * 获取启动器图标状态
-     * @return [Boolean] whether to display / 是否显示
-     */
-    private val isLauncherIconShowing
-        get() = packageManager?.isComponentEnabled(homeComponent) == true
 }

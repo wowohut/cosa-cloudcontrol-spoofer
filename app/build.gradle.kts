@@ -4,7 +4,6 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.ksp)
 }
 
 android {
@@ -34,11 +33,12 @@ android {
         buildConfig = true
         viewBinding = true
     }
+    packaging {
+        resources {
+            merges += "META-INF/xposed/*"
+        }
+    }
     lint { checkReleaseBuilds = false }
-
-    // TODO Please visit https://highcapable.github.io/YukiHookAPI/en/api/special-features/host-inject
-    // TODO 请参考 https://highcapable.github.io/YukiHookAPI/zh-cn/api/special-features/host-inject
-    // androidResources.additionalParameters += listOf("--allow-reserved-package-id", "--package-id", "0x64")
 }
 
 tasks.withType<KotlinJvmCompile>().configureEach {
@@ -53,33 +53,11 @@ tasks.withType<KotlinJvmCompile>().configureEach {
 }
 
 dependencies {
-    compileOnly(files("libs/xposed-api-82.jar"))
-    ksp(libs.yukihookapi.ksp.xposed)
-    implementation(libs.yukihookapi)
-
-    // Optional: KavaRef (https://github.com/HighCapable/KavaRef)
-    implementation(libs.kavaref.core)
-    implementation(libs.kavaref.extension)
-
-    // Optional: Hikage (https://github.com/BetterAndroid/Hikage)
-    ksp(libs.hikage.compiler)
-    implementation(libs.hikage.core)
-    implementation(libs.hikage.extension)
-    implementation(libs.hikage.widget.androidx)
-    implementation(libs.hikage.widget.material)
-
-    // Optional: BetterAndroid (https://github.com/BetterAndroid/BetterAndroid)
-    implementation(libs.betterandroid.ui.component)
-    implementation(libs.betterandroid.ui.component.adapter)
-    implementation(libs.betterandroid.ui.extension)
-    implementation(libs.betterandroid.system.extension)
-
-    implementation(libs.drawabletoolbox)
+    compileOnly(libs.libxposed.api)
+    implementation(libs.libxposed.service)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.constraintlayout)
-
     implementation(libs.material)
 
     testImplementation(libs.junit)
