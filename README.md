@@ -1,76 +1,25 @@
-# CosaSpoof
+# CosaSpoof - ColorOS 游戏云控伪装
 
 ## 项目简介
 
-一个基于 `libxposed API 101` 的现代 Xposed 模块，用于 Hook ColorOS 的 `com.oplus.cosa`（应用增强服务），伪装 `ro.boot.prjname`，让应用增强服务按“目标机型”拉取对应的云控配置。
+CosaSpoof 是一个基于 `libxposed API 101` 开发的 Xposed 模块，专为 ColorOS/realmeUI 系统设计。其核心功能是拦截并修改系统「应用增强服务」(`com.oplus.cosa`) 读取的 `ro.boot.prjname`（主板机型代号）属性，将其伪装为用户指定的机型代号。
 
-> 这里的“云控”可理解为游戏调度/策略配置（如性能策略、帧率策略等）。通常在同一 SoC 平台内，选择更合适的云控配置能让游戏体验更接近该平台的最佳状态。
+**工作原理：**
+ColorOS / realmeUI 的应用增强服务会根据设备的 `ro.boot.prjname` 从云端拉取特定的游戏调度配置（例如风驰、FAS 等）。在相同 SoC 平台下，不同机型可能会被分配到差异化的性能调度方案。
+通过本模块，可在不改变系统其他属性的前提下，将当前设备的标识伪装为特定机型，从而获取目标机型的性能调度配置。
 
-## 需求背景
+## 模块特性
 
-- ColorOS/realmeUI 的应用增强服务（`com.oplus.cosa`）会根据 `ro.boot.prjname` 拉取对应机型的云控配置
-- 不同机型的云控（游戏调度）配置可能有差异（如风驰，FAS等）
-- 在同一 SoC 平台下，希望切换到另一机型的云控配置，以获得更合适的调度策略与游戏体验
-
-## 功能需求
-
-### 核心功能
-
-- Hook `SystemProperties.get(String)` 与 `get(String, String)`，当读取 `ro.boot.prjname` 时返回伪装值
-- 仅对 `com.oplus.cosa` 生效，不影响系统其他进程
-- 设置页通过 `RemotePreferences` 读写伪装值
-
-### 技术实现
-
-- **框架**: libxposed API 101
-- **平台**: 支持 modern Xposed API 的 LSPosed / libxposed 实现
-- **语言**: Kotlin
-- **最低 API**: 27 (Android 8.1)
-- **目标 API**: 36
-
-## Hook 点
-
-```kotlin
-if (key == "ro.boot.prjname") {
-    return spoofValue
-}
-return originalValue
-```
-
-## 配置项
-
-| 配置                | 值        | 说明                           |
-| ------------------- | --------- | ------------------------------ |
-| `ro.boot.prjname` | `24831` | 默认伪装值，可在模块设置页修改 |
-
-说明：修改后需清除 `com.oplus.cosa` 数据重启生效。
-
-## 使用方法
-
-1. 编译安装 APK
-2. 在框架中激活模块
-3. 确认作用域仅为 `com.oplus.cosa`
-4. 打开模块设置页，写入需要的 `ro.boot.prjname`，然后自动清除数据重启手机
-
-## 开发构建说明
-
-- 模块入口走 `META-INF/xposed/java_init.list`
-- 模块元数据走 `META-INF/xposed/module.prop`
-- 作用域走 `META-INF/xposed/scope.list`
+- **作用域限制**：仅在 `com.oplus.cosa` 进程中拦截 `SystemProperties.get` 相关方法，未对系统其他组件进行修改，不影响日常 OTA 更新。
+- **开发架构**：使用 Kotlin 开发，设置界面基于 Jetpack Compose 构建，并采用 `libxposed API 101` 。
+- **配置生效逻辑**：设置独立页面，修改保存代号后，模块将调用 Root 权限清理云控相关应用数据并触发系统重启，从而使配置生效。
 
 ## 项目结构
 
-- `hook/CosaModule.kt`: modern Xposed 入口
-- `data/SpoofSettings.kt`: 远程配置读写封装
-- `data/XposedServiceBridge.kt`: 模块 App 与 Xposed Service 的连接桥
-- `ui/activity/MainActivity.kt`: 极简设置页
-
-## 注意事项
-
-- 仅影响应用增强服务，不影响 OTA 更新
-- 不再兼容旧版共享偏好配置；升级后如有自定义值，需要在设置页重新保存一次
-- 需要框架支持 `libxposed API 101` 和 remote capabilities
+- `hook/CosaModule.kt` —— 核心 Hook 逻辑
+- `ui/activity/MainActivity.kt` —— 模块设置与交互
+- `data/...` —— 持久化配置，以及执行清理数据和重启手机的 Root 脚本
 
 ## 许可证
 
-MIT License
+本项目基于 [MIT License](LICENSE) 授权开源。
