@@ -1,6 +1,5 @@
 package com.spoof.cosa.hook
 
-import android.content.SharedPreferences
 import android.util.Log
 import com.spoof.cosa.common.SpoofConfig
 import com.spoof.cosa.data.SpoofSettings
@@ -16,16 +15,6 @@ class CosaModule : XposedModule() {
 
     @Volatile
     private var cachedFakePrjname: String = SpoofConfig.defaultFakePrjname
-
-    @Volatile
-    private var settings: SpoofSettings? = null
-
-    private val preferenceChangeListener =
-        SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == SpoofConfig.prefsKeyFakePrjname) {
-                cachedFakePrjname = settings?.getFakePrjname() ?: SpoofConfig.defaultFakePrjname
-            }
-        }
 
     override fun onPackageReady(param: PackageReadyParam) {
         if (param.packageName != SpoofConfig.targetPackageName || !param.isFirstPackage) return
@@ -55,14 +44,10 @@ class CosaModule : XposedModule() {
 
     private fun initializeSettingsCache() {
         runCatching {
-            val remotePreferences = getRemotePreferences(SpoofConfig.remotePrefsGroup)
-            val loadedSettings = SpoofSettings(remotePreferences)
-            remotePreferences.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
-            remotePreferences.registerOnSharedPreferenceChangeListener(preferenceChangeListener)
-            settings = loadedSettings
-            cachedFakePrjname = loadedSettings.getFakePrjname()
+            cachedFakePrjname = SpoofSettings(
+                getRemotePreferences(SpoofConfig.remotePrefsGroup)
+            ).getFakePrjname()
         }.onFailure {
-            settings = null
             cachedFakePrjname = SpoofConfig.defaultFakePrjname
             log(Log.WARN, TAG, "Fallback to default fake prjname", it)
         }

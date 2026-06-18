@@ -13,7 +13,6 @@ android {
         targetSdk = gropify.project.android.targetSdk
         versionName = gropify.project.app.versionName
         versionCode = gropify.project.app.versionCode
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         release {
@@ -28,7 +27,6 @@ android {
     }
     buildFeatures {
         buildConfig = true
-        viewBinding = true
         compose = true
     }
     packaging {
@@ -47,19 +45,12 @@ dependencies {
     compileOnly(libs.libxposed.api)
     implementation(libs.libxposed.service)
 
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
-
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
     debugImplementation(libs.androidx.compose.ui.tooling)
-
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.espresso.core)
 }
